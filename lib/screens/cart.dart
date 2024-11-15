@@ -1,126 +1,159 @@
+import 'package:agro/screens/dashboard.dart';
+import 'package:agro/screens/mystore.dart';
+import 'package:agro/screens/trs.dart';
+import 'package:agro/screens/payment.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'dashboard.dart';
-import 'mystore.dart';
-import 'trs.dart';
-import 'payment.dart';
 
 class Cart extends StatefulWidget {
-  final List<Map<String, dynamic>> cartItems;
-
-  Cart({required this.cartItems});
+  const Cart({Key? key, required String userId}) : super(key: key);
 
   @override
   _CartState createState() => _CartState();
 }
 
 class _CartState extends State<Cart> {
-  int _currentIndex = 1;
+  final String? userId = FirebaseAuth.instance.currentUser?.uid;
+  List<Map<String, dynamic>> cartItems = [];
+
+  @override
+  void initState() {
+    super.initState();
+    fetchCartItems();
+  }
+
+  Future<void> fetchCartItems() async {
+    List<Map<String, dynamic>> items = [];
+
+    try {
+      if (userId != null) {
+        QuerySnapshot snapshot = await FirebaseFirestore.instance
+            .collection('carts')
+            .doc(userId)
+            .collection('items')
+            .get();
+
+        items = snapshot.docs.map((doc) {
+          final data = doc.data() as Map<String, dynamic>;
+          data['id'] = doc.id; // Menyimpan ID dokumen
+          return data;
+        }).toList();
+
+        setState(() {
+          cartItems = items; // Perbarui daftar cartItems
+        });
+      } else {
+        print('User ID tidak tersedia.');
+      }
+    } catch (e) {
+      print('Error mengambil data keranjang: $e');
+    }
+  }
+
+  Future<void> updateItemQuantity(String itemId, int quantity) async {
+    if (quantity < 1) {
+      await deleteItem(itemId);
+    } else {
+      try {
+        await FirebaseFirestore.instance
+            .collection('carts')
+            .doc(userId)
+            .collection('items')
+            .doc(itemId)
+            .update({'quantity': quantity});
+        print('Jumlah barang berhasil diupdate menjadi: $quantity');
+      } catch (e) {
+        print('Error mengupdate jumlah barang: $e');
+      }
+    }
+    await fetchCartItems(); // Ambil ulang data setelah mengupdate
+  }
+
+  Future<void> deleteItem(String itemId) async {
+    try {
+      await FirebaseFirestore.instance
+          .collection('carts')
+          .doc(userId)
+          .collection('items')
+          .doc(itemId)
+          .delete();
+      print('Item berhasil dihapus dari keranjang.');
+    } catch (e) {
+      print('Error menghapus item: $e');
+    }
+  }
+
+  Future<void> clearCart() async {
+    try {
+      QuerySnapshot snapshot = await FirebaseFirestore.instance
+          .collection('carts')
+          .doc(userId)
+          .collection('items')
+          .get();
+
+      for (var doc in snapshot.docs) {
+        await doc.reference.delete(); // Hapus setiap item
+      }
+      print('Semua item di keranjang berhasil dihapus.');
+
+      // Memperbarui tampilan setelah penghapusan
+      await fetchCartItems();
+    } catch (e) {
+      print('Error menghapus item di keranjang: $e');
+    }
+  }
+
+  Future<void> handleClearCart() async {
+    await clearCart(); // Panggil fungsi clearCart yang sudah ada
+  }
 
   @override
   Widget build(BuildContext context) {
-    double totalPrice = _calculateTotalPrice();
-
     return Scaffold(
       appBar: AppBar(
-        title: Text('Keranjang'),
-        backgroundColor: const Color.fromARGB(255, 42, 226, 42),
-        automaticallyImplyLeading: false,
+        title: const Text('Keranjang Belanja'),
       ),
-      body: widget.cartItems.isNotEmpty
-          ? Column(
+      body: cartItems.isEmpty
+          ? const Center(child: Text('Belum ada barang di keranjang'))
+          : Column(
               children: [
                 Expanded(
                   child: ListView.builder(
-                    itemCount: widget.cartItems.length,
+                    itemCount: cartItems.length,
                     itemBuilder: (context, index) {
-                      var item = widget.cartItems[index];
-
-                      String name = item['name'] ?? 'Nama produk tidak tersedia';
-                      double price = item['price'] != null
-                          ? double.tryParse(item['price'].toString().replaceAll('\Rp', '')) ?? 0.0
-                          : 0.0;
-                      int quantity = item['quantity'] ?? 1;
-
-                      return Container(
-                        margin: EdgeInsets.symmetric(vertical: 8.0),
-                        padding: EdgeInsets.all(8.0),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(10),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.grey.withOpacity(0.5),
-                              spreadRadius: 2,
-                              blurRadius: 5,
-                              offset: Offset(0, 3),
+                      final item = cartItems[index];
+                      return ListTile(
+                        title: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Nama Produk: ${item['name'] ?? 'Nama tidak tersedia'}', // Menambahkan nama produk
+                              style: TextStyle(fontWeight: FontWeight.bold),
                             ),
+                            Text('Harga: Rp ${item['price'] ?? 0}'),
+                            Text(
+                                'Kategori: ${item['category'] ?? 'Tidak tersedia'}'),
+                            Text('Jumlah: ${item['quantity'] ?? 1}'),
                           ],
                         ),
-                        child: Row(
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
                           children: [
-                            item['image'] != null
-                                ? Image.network(
-                                    item['image'],
-                                    width: 80,
-                                    height: 80,
-                                    fit: BoxFit.cover,
-                                  )
-                                : Icon(Icons.image_not_supported, size: 80),
-                            SizedBox(width: 16),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  name,
-                                  style: TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                SizedBox(height: 8),
-                                Text(
-                                  'Harga: \Rp${price}',
-                                  style: TextStyle(fontSize: 16),
-                                ),
-                                SizedBox(height: 8),
-                                Row(
-                                  children: [
-                                    IconButton(
-                                      icon: Icon(Icons.remove),
-                                      onPressed: () {
-                                        setState(() {
-                                          if (quantity > 1) {
-                                            item['quantity'] -= 1;
-                                          }
-                                        });
-                                      },
-                                    ),
-                                    Text('$quantity'),
-                                    IconButton(
-                                      icon: Icon(Icons.add),
-                                      onPressed: () {
-                                        setState(() {
-                                          item['quantity'] += 1;
-                                        });
-                                      },
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                            Spacer(),
                             IconButton(
-                              icon: Icon(Icons.delete, color: Colors.red),
+                              icon: const Icon(Icons.remove),
                               onPressed: () {
-                                setState(() {
-                                  widget.cartItems.removeAt(index);
-                                });
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text('$name dihapus dari keranjang'),
-                                    duration: Duration(seconds: 2),
-                                  ),
-                                );
+                                int currentQuantity = item['quantity'] ?? 1;
+                                updateItemQuantity(
+                                    item['id'], currentQuantity - 1);
+                              },
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.add),
+                              onPressed: () {
+                                int currentQuantity = item['quantity'] ?? 1;
+                                updateItemQuantity(
+                                    item['id'], currentQuantity + 1);
                               },
                             ),
                           ],
@@ -132,105 +165,134 @@ class _CartState extends State<Cart> {
                 Padding(
                   padding: const EdgeInsets.all(16.0),
                   child: Text(
-                    'Total: \Rp${totalPrice.toStringAsFixed(2)}',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    'Total Harga: Rp${cartItems.fold(0.0, (sum, item) {
+                      final price =
+                          item['price'] is num ? item['price'].toDouble() : 0.0;
+                      final quantity =
+                          item['quantity'] is int ? item['quantity'] : 0;
+                      return sum + (price * quantity);
+                    })} ',
+                    style: const TextStyle(
+                        fontSize: 20, fontWeight: FontWeight.bold),
                   ),
                 ),
                 ElevatedButton(
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (context) => Payment(totalPrice: totalPrice, productName: '',)),
-                    );
+                  onPressed: () async {
+                    if (cartItems.isNotEmpty) {
+                      // Ambil detail produk untuk pembayaran
+                      List<Map<String, dynamic>> productsForPayment =
+                          cartItems.map((item) {
+                        return {
+                          'id': item['id'], // Simpan productId di sini
+                          'name': item['name'],
+                          'price': item['price'],
+                          'quantity': item['quantity'],
+                        };
+                      }).toList();
+
+                      // Navigasi ke halaman pembayaran
+                      bool paymentSuccess = await Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => Payment(
+                            totalPrice: cartItems.fold(0.0, (sum, item) {
+                              final price = item['price'] is num
+                                  ? item['price'].toDouble()
+                                  : 0.0;
+                              final quantity = item['quantity'] is int
+                                  ? item['quantity']
+                                  : 0;
+                              return sum + (price * quantity);
+                            }),
+                            products: productsForPayment,
+                            onPaymentSuccess: handleClearCart,
+                            onClearCart: handleClearCart,
+                          ),
+                        ),
+                      );
+
+                      // Jika pembayaran berhasil, bersihkan keranjang
+                      if (paymentSuccess) {
+                        await clearCart();
+                      }
+                    }
                   },
-                  child: Text('Beli'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green,
-                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  ),
-                ),
+                  child: const Text('Ke Pembayaran'),
+                )
               ],
-            )
-          : Center(
-              child: Text(
-                'Keranjang Anda kosong',
-                style: TextStyle(fontSize: 18),
-              ),
             ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        items: const <BottomNavigationBarItem>[
-          BottomNavigationBarItem(
-            icon: Icon(Icons.home),
-            label: 'Dashboard',
-            backgroundColor: Color.fromARGB(255, 42, 226, 42),
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.shopping_cart),
-            label: 'Pesanan',
-            backgroundColor: Color.fromARGB(255, 42, 226, 42),
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.store),
-            label: 'Toko Saya',
-            backgroundColor: Color.fromARGB(255, 42, 226, 42),
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.receipt),
-            label: 'Transaksi',
-            backgroundColor: Color.fromARGB(255, 42, 226, 42),
-          ),
-        ],
-        selectedItemColor: Colors.white,
-        unselectedItemColor: Colors.blueGrey,
-        onTap: (int index) {
-          setState(() {
-            _currentIndex = index;
-          });
-          _navigateToPage(index);
-        },
-      ),
+      bottomNavigationBar: _buildBottomNavigationBar(context),
     );
   }
 
-  double _calculateTotalPrice() {
-    double totalPrice = 0.0;
-    for (var item in widget.cartItems) {
-      if (item['price'] != null && item['quantity'] != null) {
-        try {
-          double itemPrice = double.tryParse(item['price'].toString().replaceAll('\$', '')) ?? 0.0;
-          totalPrice += itemPrice * item['quantity'];
-        } catch (e) {
-          print('Error parsing price: ${item['price']}');
-        }
-      }
-    }
-    return totalPrice;
-  }
+  BottomNavigationBar _buildBottomNavigationBar(BuildContext context) {
+    int _currentIndex = 1; // Index untuk Cart
 
-  void _navigateToPage(int index) {
-    switch (index) {
-      case 0:
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => Dashboard(products: [], storeName: '',)),
-        );
-        break;
-      case 2:
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => Mystore()),
-        );
-        break;
-      case 3:
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => Trs()),
-        );
-        break;
-    }
+    return BottomNavigationBar(
+      currentIndex: _currentIndex,
+      items: const <BottomNavigationBarItem>[
+        BottomNavigationBarItem(
+          icon: Icon(Icons.home),
+          label: 'Dashboard',
+          backgroundColor: Color.fromRGBO(168, 207, 69, 1),
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.shopping_cart),
+          label: 'Pesanan',
+          backgroundColor: Color.fromRGBO(168, 207, 69, 1),
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.store),
+          label: 'Toko Saya',
+          backgroundColor: Color.fromRGBO(168, 207, 69, 1),
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.receipt),
+          label: 'Transaksi',
+          backgroundColor: Color.fromRGBO(168, 207, 69, 1),
+        ),
+      ],
+      selectedItemColor: Colors.white,
+      unselectedItemColor: Colors.blueGrey,
+      onTap: (int index) {
+        if (index == _currentIndex) return;
+
+        switch (index) {
+          case 0:
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(
+                builder: (context) => Dashboard(products: []),
+              ),
+            );
+            break;
+          case 1:
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(
+                builder: (context) =>
+                    const Cart(userId: ''), // Perbaiki di sini
+              ),
+            );
+            break;
+          case 2:
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(
+                builder: (context) => Mystore(),
+              ),
+            );
+            break;
+          case 3:
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(
+                builder: (context) => Trs(),
+              ),
+            );
+            break;
+        }
+      },
+    );
   }
 }

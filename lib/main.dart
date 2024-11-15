@@ -1,12 +1,16 @@
 import 'package:agro/screens/loading.dart';
-import 'package:agro/screens/setting.dart';
 import 'package:flutter/material.dart';
-import 'package:agro/screens/dashboard.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
   runApp(Main());
 }
-
+ 
 class Main extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
@@ -16,7 +20,7 @@ class Main extends StatelessWidget {
       theme: ThemeData(
         primarySwatch: Colors.blue,
       ),
-      home: Dashboard(products: [], storeName: '',),
+      home: Loading(),
     );
   }
 }

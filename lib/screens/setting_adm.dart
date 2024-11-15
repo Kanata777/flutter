@@ -9,12 +9,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:agro/setting_components/manage_address.dart';
 import 'package:agro/setting_components/manage_acc.dart';
 
-class Setting extends StatefulWidget {
+class SettingAdm extends StatefulWidget {
   @override
-  State<Setting> createState() => _SettingState();
+  State<SettingAdm> createState() => _SettingAdmState();
 }
 
-class _SettingState extends State<Setting> {
+class _SettingAdmState extends State<SettingAdm> {
   File? _image;
   String _name = "";
   String _username = "";
