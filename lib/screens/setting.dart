@@ -245,15 +245,6 @@ class _SettingState extends State<Setting> {
             },
           ),
           Divider(),
-          ListTile(
-            leading: Icon(Icons.info),
-            title: Text('Informasi Aplikasi'),
-            trailing: Icon(Icons.arrow_forward_ios),
-            onTap: () {
-              // Aksi untuk melihat informasi aplikasi
-            },
-          ),
-          Divider(),
           // Tambahkan tombol logout di bawah
           SizedBox(height: 20),
           TextButton(
